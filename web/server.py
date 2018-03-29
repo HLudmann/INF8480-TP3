@@ -1,6 +1,5 @@
-import sys
+#! /usr/local/bin/python
 import BaseHTTPServer
-import SimpleHTTPServer
 import socket
 import time
 from urlparse import urlparse
