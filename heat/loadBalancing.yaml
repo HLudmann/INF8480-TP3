@@ -1,0 +1,77 @@
+heat_template_version: 2014-10-16
+
+description: A template to deploy a load balanced web server
+
+parameters:
+  key:
+    type: string
+    description: key name for outside connections
+    default: poly_rsa
+
+  nbt_instances:
+    type: number
+    description: Number of web server instances
+    default: 2
+
+  subnet_id:
+    type: string
+    description: Sous-reseau dans lequel le load balancer sera situe
+    default: 6579eb07-88c3-4707-9c6e-ab90a78cca02
+
+resources:
+  server_nodes:
+    type: OS::Heat::ResourceGroup
+    properties:
+      count: { get_param: nbt_instances }
+      resource_def:
+        type: 'OS::Nova::Server'
+        properties:
+          name: web_server_%index%
+          image: INF4410-Ubuntu-trusty-mini
+          flavor: INF4410-mini
+          admin_pass: "testing"
+          key_name: { get_param: key }
+          networks:
+            - network: cac571ab-8e5c-4332-8e05-4c69a56bda9e
+            - network: 938775f1-1d27-4d35-a41d-e76eac6797db
+          user_data: |
+            #!/bin/bash
+            wget https://raw.githubusercontent.com/houssemmh/INF4410-TP3/master/server.py
+            chmod +x server.py
+            exec python server.py
+
+  mypool:
+    type: OS::Neutron::Pool
+    properties:
+      protocol: HTTP
+      monitors: [{ get_resource: monitor }]
+      subnet_id: { get_param: subnet_id }
+      lb_method: ROUND_ROBIN
+      vip:
+        protocol_port: 8000
+
+  loadbalancer:
+    type: OS::Neutron::LoadBalancer
+    properties:
+      members: { get_attr: [server_nodes, refs] }
+      protocol_port: 8000
+      pool_id: { get_resource: mypool }
+
+  monitor:
+    type: OS::Neutron::HealthMonitor
+    properties:
+      type: TCP
+      delay: 10
+      max_retries: 1
+      timeout: 4
+
+  lb_floatingIP:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: ext-net
+      port_id: {get_attr: [mypool, vip, port_id]}
+
+outputs:
+  pool_ip_address:
+    value: { get_attr: [mypool, vip, address] }
+    description: The IP address of the load balancing pool
